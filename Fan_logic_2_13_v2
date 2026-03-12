@@ -4,6 +4,18 @@
 #include <SparkFun_SCD4x_Arduino_Library.h>
 #include "DFRobot_OzoneSensor.h"
 
+//Ozone
+#define COLLECT_NUMBER   20
+#define Ozone_IICAddress OZONE_ADDRESS_3
+/*   iic slave Address, The default is ADDRESS_3
+       ADDRESS_0               0x70      // iic device address
+       ADDRESS_1               0x71
+       ADDRESS_2               0x72
+       ADDRESS_3               0x73
+*/
+DFRobot_OzoneSensor Ozone;
+
+
 SCD4x ozoneSensor;
 SensirionI2CSen5x sen5x;
 
@@ -14,8 +26,9 @@ struct Reading {
   bool isactive;
 };
 
-const int number_of_readings = 11;
+const int number_of_readings = 12;
 Reading readings[number_of_readings];
+int n = 0; //number of iterations
 
 void setup_sen55_sensor(int in1, int in2) {
   sen5x.begin(Wire);
@@ -55,6 +68,19 @@ void setup_ozone_sensor() {
   }
 }
 
+void setup_ozone_two() {
+  Serial.begin(9600); // I believe this is the baud rate. In the ozone only code, this worked perfectly, but here it may need to be adjusted to whatever the current baud rate is.
+  while(!Ozone.begin(Ozone_IICAddress)) {
+    Serial.println("I2c device number error !");
+    delay(1000);
+  }  Serial.println("I2c connect success !");
+/*   Set iic mode, active mode or passive mode
+       MEASURE_MODE_AUTOMATIC            // active  mode
+       MEASURE_MODE_PASSIVE              // passive mode
+*/
+    Ozone.setModes(MEASURE_MODE_PASSIVE);
+}
+
 void setup_fan(int fan_pin) {
   pinMode(fan_pin, OUTPUT);
 }
@@ -82,6 +108,8 @@ void setup_readings() { // TODO
   readings[9].lowerbound = 22;  // Temperature
   readings[10].upperbound = 1000000; // Humidity
   readings[10].lowerbound = 1000; // Humidity
+  readings[11].upperbound = 1000000; // Ozone
+  readings[11].lowerbound = 1000; // Ozone
 }
 
 void setup_bools() {
@@ -96,6 +124,8 @@ void setup() {
   setup_bools();
   setup_sen55_sensor(2, 3);
   setup_ozone_sensor();
+  setup_ozone_two();
+ // setup_ozone_2();
   setup_fan(10);
   setup_readings();
 }
@@ -118,6 +148,8 @@ void read_ozone() {
   readings[8].value  = ozoneSensor.getCO2();
   readings[9].value  = ozoneSensor.getTemperature();
   readings[10].value = ozoneSensor.getHumidity();
+  readings[11].value = Ozone.readOzoneData(COLLECT_NUMBER); //in PPB. 
+  // the prior line may throw an error due to a type mismatch, as value is a float but the reading is in int16_t. In this case, try casting or other debugging methods.
 }
 
 void update_isactives() {
@@ -157,6 +189,7 @@ void fan_control(float FAN) {
 }
 
 void printer() {
+  // particulate matter in units of micrograms per meter cubed
   Serial.print("Pm1p0:   ");
   Serial.println(readings[0].value);
   Serial.print("Pm2p5:   ");
@@ -179,13 +212,19 @@ void printer() {
   Serial.println(readings[9].value);
   Serial.print("Humidity from Ozone:   ");
   Serial.println(readings[10].value);
+  Serial.print("Ozone");
+  Serial.println(readings[11].value);
 }
 
 void loop() {
+  while (n<10) { //n controls the number of readings.
   read_sen55();
   read_ozone();
-  update_isactives(); // TODO
+  update_isactives();
   fan_control(10);
   //quality_descison();
   printer();
+  n = n+1;
+  }
+  exit;
 }
